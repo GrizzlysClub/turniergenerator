@@ -261,6 +261,8 @@ tr.qualified td.team .rankbadge{background:var(--accent-soft); color:var(--accen
   <div class="footer">&copy; <span id="year"></span> Unihockey am Greifensee</div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script>
 (function(){
 
@@ -282,7 +284,8 @@ var state = {
   playThird: true,
   generated: false,
   matches: [],
-  editing: true
+  editing: true,
+  tournamentId: null
 };
 
 var DEFAULT_TEAM_NAMES = ["Gelb","Blau","Gr\u00fcn","Durchsichtig","Orange","Schwarz","Weiss","Violett","Rot","T\u00fcrkis","Braun","Grau"];
@@ -297,7 +300,107 @@ function ensureTeamArrays(){
 }
 ensureTeamArrays();
 
-// ---------- share link (encode/restore full state in the URL) ----------
+// ---------- live sync (Firebase Realtime Database, when available) ----------
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC3NNfNf9uCgDN3TL8nSmNslWoV4qHi5Bk",
+  authDomain: "turniergenerator-87b1f.firebaseapp.com",
+  databaseURL: "https://turniergenerator-87b1f-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "turniergenerator-87b1f"
+};
+var fbDb = null, fbAvailable = false;
+try{
+  if(typeof firebase !== 'undefined'){
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbDb = firebase.database();
+    fbAvailable = true;
+  }
+} catch(e){ fbAvailable = false; }
+
+function genTournamentId(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+}
+function buildConfigPayload(){
+  var matches = state.matches.map(function(m){
+    var copy = {};
+    ['id','type','group','round','field','slotIndex','time','label','home','away','teams'].forEach(function(k){
+      if(m[k]!==undefined) copy[k]=m[k];
+    });
+    return copy;
+  });
+  return {
+    numTeams:state.numTeams, teamNames:state.teamNames, teamGroups:state.teamGroups,
+    numGroups:state.numGroups, numFields:state.numFields, scheduleMode:state.scheduleMode,
+    start:state.start, end:state.end, matchDuration:state.matchDuration,
+    breakDuration:state.breakDuration, breakBeforeKO:state.breakBeforeKO,
+    playSemis:state.playSemis, playFinal:state.playFinal, playThird:state.playThird,
+    matches:matches
+  };
+}
+function persistNewTournament(){
+  if(!fbAvailable || !state.tournamentId) return Promise.resolve();
+  return fbDb.ref('tournaments/'+state.tournamentId+'/config').set(buildConfigPayload());
+}
+var pushTimers = {};
+function pushScoreForMatch(m){
+  if(!fbAvailable || !state.tournamentId) return;
+  var payload = {homeScore: m.homeScore==null?null:m.homeScore, awayScore: m.awayScore==null?null:m.awayScore, penaltyWinner: m.penaltyWinner||null};
+  fbDb.ref('tournaments/'+state.tournamentId+'/scores/'+m.id).set(payload).catch(function(){});
+}
+function debouncedPushScore(m){
+  if(pushTimers[m.id]) clearTimeout(pushTimers[m.id]);
+  pushTimers[m.id] = setTimeout(function(){ pushScoreForMatch(m); }, 400);
+}
+var pendingRemoteRender = false;
+function isTypingInScoreInput(){
+  var el = document.activeElement;
+  return !!(el && el.closest && el.closest('.score-inputs'));
+}
+document.addEventListener('focusout', function(e){
+  if(pendingRemoteRender && e.target && e.target.closest && e.target.closest('.score-inputs')){
+    pendingRemoteRender = false;
+    refreshStandings(); renderOutput();
+  }
+});
+function attachLiveListeners(id){
+  if(!fbAvailable) return;
+  fbDb.ref('tournaments/'+id+'/scores').on('value', function(snap){
+    var scores = snap.val() || {};
+    state.matches.forEach(function(m){
+      var s = scores[m.id];
+      if(s){ m.homeScore = (s.homeScore==null?null:s.homeScore); m.awayScore = (s.awayScore==null?null:s.awayScore); m.penaltyWinner = s.penaltyWinner||null; }
+    });
+    if(isTypingInScoreInput()){ pendingRemoteRender = true; }
+    else { refreshStandings(); renderOutput(); }
+  });
+}
+function loadTournamentFromFirebase(id){
+  return fbDb.ref('tournaments/'+id+'/config').once('value').then(function(snap){
+    var cfg = snap.val();
+    if(!cfg) throw new Error('not_found');
+    state.numTeams=cfg.numTeams; state.teamNames=cfg.teamNames; state.teamGroups=cfg.teamGroups;
+    state.numGroups=cfg.numGroups; state.numFields=cfg.numFields; state.scheduleMode=cfg.scheduleMode;
+    state.start=cfg.start; state.end=cfg.end; state.matchDuration=cfg.matchDuration;
+    state.breakDuration=cfg.breakDuration; state.breakBeforeKO=cfg.breakBeforeKO;
+    state.playSemis=cfg.playSemis; state.playFinal=cfg.playFinal; state.playThird=cfg.playThird;
+    state.matches = (cfg.matches||[]).map(function(m){ m.homeScore=null; m.awayScore=null; m.penaltyWinner=null; return m; });
+    state.generated = true;
+    state.editing = false;
+    state.tournamentId = id;
+    return fbDb.ref('tournaments/'+id+'/scores').once('value');
+  }).then(function(snap){
+    var scores = snap.val() || {};
+    state.matches.forEach(function(m){
+      var s = scores[m.id];
+      if(s){ m.homeScore=s.homeScore; m.awayScore=s.awayScore; m.penaltyWinner=s.penaltyWinner||null; }
+    });
+    attachLiveListeners(id);
+    renderAll();
+  });
+}
+
+// ---------- share link fallback (encode/restore full state in the URL hash) ----------
+// Used only when Firebase is unreachable (e.g. offline, or the sandboxed claude.ai preview,
+// whose content-security-policy blocks the Firebase network calls).
 function toBase64Url(str){
   var b64 = btoa(unescape(encodeURIComponent(str)));
   return b64.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -308,18 +411,14 @@ function fromBase64Url(str){
   return decodeURIComponent(escape(atob(str)));
 }
 function buildShareState(){
-  return {
-    v:1,
-    numTeams:state.numTeams, teamNames:state.teamNames, teamGroups:state.teamGroups,
-    numGroups:state.numGroups, numFields:state.numFields, scheduleMode:state.scheduleMode,
-    start:state.start, end:state.end, matchDuration:state.matchDuration,
-    breakDuration:state.breakDuration, breakBeforeKO:state.breakBeforeKO,
-    playSemis:state.playSemis, playFinal:state.playFinal, playThird:state.playThird,
-    generated:state.generated, matches:state.matches
-  };
+  var s = buildConfigPayload();
+  s.v = 1;
+  s.generated = state.generated;
+  s.matches = state.matches;
+  return s;
 }
 function syncShareLink(){
-  if(!state.generated) return;
+  if(fbAvailable || !state.generated) return;
   try{
     var encoded = toBase64Url(JSON.stringify(buildShareState()));
     var newHash = '#s='+encoded;
@@ -339,17 +438,14 @@ function tryLoadFromHash(){
     state.playSemis=data.playSemis; state.playFinal=data.playFinal; state.playThird=data.playThird;
     state.generated=data.generated; state.matches=data.matches||[];
     state.editing=false;
-    var byId={};
-    state.matches.forEach(function(m){byId[m.id]=m;});
-    state.matches.forEach(function(m){
-      if(m.home && m.home.matchRef) m.home.matchRef = byId[m.home.matchRef.id] || m.home.matchRef;
-      if(m.away && m.away.matchRef) m.away.matchRef = byId[m.away.matchRef.id] || m.away.matchRef;
-    });
     return true;
   } catch(e){ return false; }
 }
-tryLoadFromHash();
-ensureTeamArrays();
+
+function getQueryParam(name){
+  var m = new RegExp('[?&]'+name+'=([^&]+)').exec(window.location.search);
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 // ---------- helpers ----------
 function parseTime(t){ var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
@@ -458,14 +554,12 @@ function generateSchedule(){
     slotOffset += koSlots.length;
   }
 
-  var semiMatchIds = matches.filter(function(m){return m.type==='semi';}).map(function(m){return m.id0;});
-  // need ids after assignSlots sets .id &mdash; collect below instead
   var semiMatches = matches.filter(function(m){return m.type==='semi';});
 
   var finalQueue = [];
   if(state.playThird && (state.playFinal || state.playSemis)){
     if(state.playSemis && semiMatches.length===2){
-      finalQueue.push({type:'third', label:'Spiel um Platz 3', teams:['l1','l2'], home:{t:'loser', matchRef: semiMatches[0]}, away:{t:'loser', matchRef: semiMatches[1]}});
+      finalQueue.push({type:'third', label:'Spiel um Platz 3', teams:['l1','l2'], home:{t:'loser', matchId: semiMatches[0].id}, away:{t:'loser', matchId: semiMatches[1].id}});
     } else if(!state.playSemis){
       if(state.numGroups===2){
         finalQueue.push({type:'third', label:'Spiel um Platz 3', teams:['tA2','tB2'], home:{t:'pos',group:'A',pos:2}, away:{t:'pos',group:'B',pos:2}});
@@ -476,7 +570,7 @@ function generateSchedule(){
   }
   if(state.playFinal){
     if(state.playSemis && semiMatches.length===2){
-      finalQueue.push({type:'final', label:'Final', teams:['w1','w2'], home:{t:'winner', matchRef: semiMatches[0]}, away:{t:'winner', matchRef: semiMatches[1]}});
+      finalQueue.push({type:'final', label:'Final', teams:['w1','w2'], home:{t:'winner', matchId: semiMatches[0].id}, away:{t:'winner', matchId: semiMatches[1].id}});
     } else {
       if(state.numGroups===2){
         finalQueue.push({type:'final', label:'Final', teams:['tA1','tB1'], home:{t:'pos',group:'A',pos:1}, away:{t:'pos',group:'B',pos:1}});
@@ -605,6 +699,11 @@ function teamAt(group, pos){
   return s[pos-1];
 }
 
+function findMatchById(id){
+  for(var i=0;i<state.matches.length;i++){ if(state.matches[i].id===id) return state.matches[i]; }
+  return null;
+}
+
 function resolveRef(ref){
   if(!ref) return null;
   if(ref.t === 'team') return {name: state.teamNames[ref.id], id: ref.id, resolved:true};
@@ -615,8 +714,8 @@ function resolveRef(ref){
     return {name: lbl, id:null, resolved:false};
   }
   if(ref.t === 'winner' || ref.t === 'loser'){
-    var m = ref.matchRef;
-    if(m.homeScore==null || m.awayScore==null) return {name: (ref.t==='winner'?'Sieger ':'Verlierer ') + (m.label||''), id:null, resolved:false};
+    var m = findMatchById(ref.matchId);
+    if(!m || m.homeScore==null || m.awayScore==null) return {name: (ref.t==='winner'?'Sieger ':'Verlierer ') + ((m&&m.label)||''), id:null, resolved:false};
     var winnerIsHome;
     if(m.homeScore === m.awayScore){
       if(m.penaltyWinner==null) return {name:'Unentschieden &mdash; Sieger w&auml;hlen', id:null, resolved:false};
@@ -823,6 +922,15 @@ function renderSetup(){
     state.matches = generateSchedule();
     state.generated = true;
     state.editing = false;
+    if(fbAvailable){
+      state.tournamentId = genTournamentId();
+      persistNewTournament().then(function(){
+        history.replaceState(null, '', '?t='+state.tournamentId);
+        attachLiveListeners(state.tournamentId);
+      });
+    } else {
+      state.tournamentId = null;
+    }
     renderAll();
   };
   if(document.getElementById('cancelBtn')) document.getElementById('cancelBtn').onclick = function(){ state.editing = false; renderAll(); };
@@ -849,7 +957,10 @@ function renderSummary(){
       (state.scheduleMode==='time' ? (overtime ? '<div class="status-pill wait">L&auml;uft &uuml;ber Endzeit</div>' : '<div class="status-pill done">Im Zeitplan</div>') : '') +
     '</div>' +
     '<div class="sharebar">' +
-      '<span class="share-hint">Link zum bearbeitbaren Spielplan teilen:</span>' +
+      (fbAvailable && state.tournamentId
+        ? '<span class="status-pill done">&#128994; Live-Sync aktiv &mdash; alle sehen dieselben Resultate</span>'
+        : '<span class="status-pill wait">Live-Sync nicht verf&uuml;gbar &mdash; Link enth&auml;lt nur eine Momentaufnahme</span>') +
+      '<span class="share-hint">Link teilen:</span>' +
       '<button class="btn ghost" id="copyLinkBtn">&#128279; Link kopieren</button>' +
       '<button class="btn whatsapp" id="waShareBtn">&#128242; Per WhatsApp teilen</button>' +
     '</div>';
@@ -978,7 +1089,7 @@ function renderOutput(){
   // champion
   var finalMatch = state.matches.filter(function(m){return m.type==='final';})[0];
   if(finalMatch && finalMatch.homeScore!=null && finalMatch.awayScore!=null){
-    var winnerRef = resolveRef({t:'winner', matchRef: finalMatch});
+    var winnerRef = resolveRef({t:'winner', matchId: finalMatch.id});
     if(winnerRef.resolved){
       html += '<div class="champion-banner"><span class="cup">&#127942;</span><div class="name">'+esc(winnerRef.name)+'</div><div class="cap">Turniersieger</div></div>';
     }
@@ -1039,6 +1150,7 @@ function wireScoreInputs(){
       if(this.dataset.side === 'home') m.homeScore = val; else m.awayScore = val;
       refreshStandings();
       renderOutput();
+      if(fbAvailable && state.tournamentId) debouncedPushScore(m); else syncShareLink();
     };
   });
   document.querySelectorAll('[data-tb]').forEach(function(sel){
@@ -1047,11 +1159,25 @@ function wireScoreInputs(){
       m.penaltyWinner = this.value || null;
       refreshStandings();
       renderOutput();
+      if(fbAvailable && state.tournamentId) pushScoreForMatch(m); else syncShareLink();
     };
   });
 }
 
-renderAll();
 document.getElementById('year').textContent = new Date().getFullYear();
+
+var initialTournamentId = getQueryParam('t');
+if(initialTournamentId && fbAvailable){
+  state.tournamentId = initialTournamentId;
+  loadTournamentFromFirebase(initialTournamentId).catch(function(){
+    tryLoadFromHash();
+    ensureTeamArrays();
+    renderAll();
+  });
+} else {
+  tryLoadFromHash();
+  ensureTeamArrays();
+  renderAll();
+}
 })();
 </script>
