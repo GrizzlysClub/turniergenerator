@@ -17,6 +17,8 @@
   --draw:#8A8B4E;
   --loss:#B0473F;
   --shadow: 0 1px 2px rgba(20,30,22,0.06), 0 6px 20px rgba(20,30,22,0.05);
+  --bar-dark:#10190F;
+  --bar-dark-ink:#5C6A61;
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -222,33 +224,50 @@ tbody tr.roundhead td{background:var(--surface-2); font-weight:800; font-size:12
 .standings-grid table td.team{font-weight:800;}
 .standings-grid table td.num, .standings-grid table th.num{text-align:center; font-variant-numeric:tabular-nums;}
 
+.app-bar{
+  display:none;
+  align-items:center; gap:10px; background:var(--bar-dark); color:#fff;
+  margin:-28px -20px 18px; padding:16px 20px; border-radius:0 0 16px 16px;
+}
+.app-bar .cup{font-size:20px;}
+.app-bar .name{font-size:16px; font-weight:800; letter-spacing:-0.01em;}
+.app-bar .tag{margin-left:auto; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:rgba(255,255,255,.6);}
+
 @media (max-width:640px){
-  /* schedule: reflow the table into a stack of touch-friendly match cards */
+  .app-bar{display:flex;}
+  .eyebrow, h1, .sub{display:none;}
+
+  /* schedule: reflow the table into a stack of compact, touch-friendly match cards */
   .schedule-table thead{display:none;}
   .schedule-table, .schedule-table tbody, .schedule-table tr, .schedule-table td{display:block; width:100%;}
   .tablewrap{overflow-x:visible; border:none; background:none; box-shadow:none;}
   .schedule-table{background:transparent;}
   .schedule-table tbody tr:not(.roundhead){
+    display:flex; flex-wrap:wrap; align-items:center;
     background:var(--surface); border:1px solid var(--line); border-radius:12px;
-    box-shadow:var(--shadow); padding:4px 14px; margin-bottom:10px;
+    box-shadow:var(--shadow); padding:10px 14px; margin-bottom:8px; gap:2px 8px;
   }
   .schedule-table tbody tr.roundhead{
-    background:none; padding:16px 2px 6px; margin:0;
+    background:var(--accent); color:#fff; border-radius:8px;
+    padding:7px 14px; margin:16px 0 8px; box-shadow:none;
   }
-  .schedule-table tbody tr:first-child.roundhead{padding-top:0;}
-  .schedule-table td{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:9px 0; border-bottom:1px dashed var(--line); text-align:right;
-  }
-  .schedule-table td:last-child{border-bottom:none;}
-  .schedule-table td::before{
-    content:attr(data-label); flex:none; text-align:left;
-    font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-dim); font-weight:800;
-  }
-  .schedule-table .matchup{justify-content:flex-end; min-width:0; text-align:right;}
-  .schedule-table .score-inputs{justify-content:flex-end;}
+  .schedule-table tbody tr.roundhead.ko{background:var(--accent-2);}
+  .schedule-table tbody tr.roundhead td{background:transparent; color:#fff; font-size:11.5px; padding:0;}
+  .schedule-table tbody tr:first-child.roundhead{margin-top:0;}
 
-  /* standings: tighter columns so all 9 fit without horizontal scroll */
+  .schedule-table td{display:flex; align-items:center; padding:0; border:none; width:auto;}
+  .schedule-table td::before{display:none;}
+  .schedule-table td[data-label="Zeit"]{order:1; font-weight:800; font-variant-numeric:tabular-nums; font-size:13px;}
+  .schedule-table td[data-label="Feld"]{order:2;}
+  .schedule-table td[data-label="Status"]{order:3; margin-left:auto;}
+  .schedule-table td[data-label="Begegnung"]{order:4; flex:0 0 100%; margin-top:9px;}
+  .schedule-table td[data-label="Resultat"]{order:5; flex:0 0 100%; justify-content:center; margin-top:6px;}
+  .schedule-table .matchup{justify-content:center; font-size:15px; min-width:0;}
+  .schedule-table .score-inputs{justify-content:center;}
+
+  /* standings: colored header band + tighter columns so all 9 fit without horizontal scroll */
+  .standings-grid table thead:last-of-type tr{background:var(--bar-dark);}
+  .standings-grid table thead:last-of-type tr th{color:#fff;}
   .standings-grid table td, .standings-grid table th{padding:8px 5px; font-size:12.5px;}
   .standings-grid table td.team{font-size:13px;}
 
@@ -285,6 +304,7 @@ tr.qualified td.team .rankbadge{background:var(--accent-soft); color:var(--accen
 </style>
 
 <div class="wrap">
+  <div class="app-bar"><span class="cup">&#127942;</span><span class="name">Turniergenerator</span><span class="tag">Spielplan &amp; Rangliste</span></div>
   <p class="eyebrow">Spielplan &amp; Rangliste</p>
   <h1>Turniergenerator</h1>
   <p class="sub">Rahmenbedingungen festlegen, Spielplan erzeugen, Resultate eintragen &mdash; die Rangliste aktualisiert sich live.</p>
@@ -1104,7 +1124,7 @@ function renderOutput(){
   koTypes.forEach(function(kt){
     var rows = state.matches.filter(function(m){return m.type===kt.t;}).sort(function(a,b){return a.slotIndex-b.slotIndex || a.field-b.field;});
     if(!rows.length) return;
-    html += '<tr class="roundhead"><td colspan="5">'+kt.label+'</td></tr>';
+    html += '<tr class="roundhead ko"><td colspan="5">'+kt.label+'</td></tr>';
     rows.forEach(function(m){ html += matchRow(m, false, false); });
   });
 
