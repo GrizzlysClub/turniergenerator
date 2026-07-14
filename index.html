@@ -55,7 +55,7 @@ h1{
 @media (max-width:640px){ .grid.cols2, .grid.cols3{grid-template-columns:1fr;} }
 
 label.field{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--ink-dim); font-weight:600;}
-label.field input[type=number], label.field input[type=time], label.field select{
+label.field input[type=number], label.field input[type=time], label.field input[type=text], label.field select{
   background:var(--surface-2); border:1px solid var(--line); border-radius:8px;
   padding:9px 10px; font-size:14.5px; color:var(--ink); font-weight:600;
   font-variant-numeric: tabular-nums;
@@ -260,6 +260,7 @@ tbody tr.roundhead.pause td{background:var(--accent-2-soft); color:var(--accent-
 }
 tr.qualified td.team .rankbadge{background:var(--accent-soft); color:var(--accent-ink);}
 
+.tournament-title{font-family:'Bungee','Arial Black',sans-serif; font-size:22px; font-weight:400; text-transform:uppercase; letter-spacing:-.01em; margin:2px 2px 20px; color:var(--accent-ink); line-height:1.1;}
 .champion-banner{
   margin-top:22px; padding:20px 24px; border-radius:14px; text-align:center;
   background:linear-gradient(135deg, var(--accent-soft), var(--surface)); border:1px solid var(--accent);
@@ -333,6 +334,7 @@ tr.qualified td.team .rankbadge{background:var(--accent-soft); color:var(--accen
 
 // ---------- state ----------
 var state = {
+  name: "",
   numTeams: 4,
   teamNames: [],
   teamGroups: [],
@@ -412,6 +414,7 @@ function buildConfigPayload(){
     return copy;
   });
   return {
+    name:state.name,
     numTeams:state.numTeams, teamNames:state.teamNames, teamGroups:state.teamGroups,
     numGroups:state.numGroups, numFields:state.numFields, scheduleMode:state.scheduleMode,
     start:state.start, end:state.end, matchDuration:state.matchDuration,
@@ -463,6 +466,7 @@ function loadTournamentFromFirebase(id){
   return fbDb.ref('tournaments/'+id+'/config').once('value').then(function(snap){
     var cfg = snap.val();
     if(!cfg) throw new Error('not_found');
+    state.name=cfg.name||"";
     state.numTeams=cfg.numTeams; state.teamNames=cfg.teamNames; state.teamGroups=cfg.teamGroups;
     state.numGroups=cfg.numGroups; state.numFields=cfg.numFields; state.scheduleMode=cfg.scheduleMode;
     state.start=cfg.start; state.end=cfg.end; state.matchDuration=cfg.matchDuration;
@@ -518,6 +522,7 @@ function tryLoadFromHash(){
   try{
     var data = JSON.parse(fromBase64Url(h.slice(3)));
     if(!data || data.v!==1) return false;
+    state.name=data.name||"";
     state.numTeams=data.numTeams; state.teamNames=data.teamNames; state.teamGroups=data.teamGroups;
     state.numGroups=data.numGroups; state.numFields=data.numFields; state.scheduleMode=data.scheduleMode;
     state.start=data.start; state.end=data.end; state.matchDuration=data.matchDuration;
@@ -902,6 +907,9 @@ function renderSetup(){
   el.innerHTML =
     '<div class="card">' +
       '<h2><span class="n">1</span>Teams &amp; Gruppen</h2>' +
+      '<label class="field" style="margin-bottom:14px;">Turniername <span style="font-weight:500;text-transform:none;letter-spacing:0;">(optional)</span>' +
+        '<input type="text" id="tournamentName" maxlength="60" placeholder="z.\u00a0B. Grizzlys Herbstturnier 2026" value="'+esc(state.name)+'">' +
+      '</label>' +
       '<div class="grid cols3">' +
         '<div class="field">' +
           '<label class="field">Anzahl Teams' +
@@ -991,6 +999,8 @@ function renderSetup(){
     '</div>';
 
   // wire events
+  var _tn = document.getElementById('tournamentName');
+  if(_tn) _tn.oninput = function(){ state.name = this.value; };
   document.getElementById('teamsUp').onclick = function(){ if(state.numTeams<12){ state.numTeams++; renderAll(); } };
   document.getElementById('teamsDown').onclick = function(){ if(state.numTeams>3){ state.numTeams--; renderAll(); } };
   document.querySelectorAll('#groupChoice .choice').forEach(function(c){
@@ -1123,6 +1133,10 @@ function scoreInputsHtml(m, canPlay){
 function renderOutput(){
   var el = document.getElementById('output');
   var html = '';
+
+  if(state.name && state.name.trim()){
+    html += '<div class="tournament-title">'+esc(state.name)+'</div>';
+  }
 
   // champion (full width, top)
   var finalMatch = state.matches.filter(function(m){return m.type==='final';})[0];

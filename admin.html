@@ -1,0 +1,204 @@
+<meta charset="UTF-8">
+<title>Turnier-Übersicht (Admin)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Karla:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+:root{
+  --bg:#F5F4F2; --surface:#FFFFFF; --surface-2:#ECEAE6; --ink:#1C1C1A; --ink-dim:#746F66;
+  --accent:#FF6507; --accent-ink:#A83E00; --accent-soft:#FFE7D3; --accent-2:#524E47;
+  --accent-2-soft:#DEDBD5; --line:#DEDBD5; --danger:#C0392B;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:'Karla',-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased;}
+.wrap{max-width:900px; margin:0 auto; padding:28px 20px 80px;}
+.header-row{display:flex; align-items:center; gap:18px; margin-bottom:24px;}
+.site-logo{width:52px; height:52px; flex:none;}
+.head-text{flex:1; min-width:0;}
+.eyebrow{text-transform:uppercase; letter-spacing:.11em; font-size:11.5px; font-weight:700; color:var(--accent-ink); margin:0 0 4px;}
+h1{font-family:'Bungee','Arial Black',sans-serif; font-size:26px; font-weight:400; text-transform:uppercase; letter-spacing:-0.01em; line-height:1.05; margin:2px 0 4px;}
+.sub{color:var(--ink-dim); font-size:14px; margin:0;}
+.card{background:var(--surface); border:2px solid var(--ink); border-radius:12px; padding:20px 22px; margin-bottom:24px;}
+label.field{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--ink-dim); font-weight:600; margin-bottom:14px;}
+label.field input{background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:11px 12px; font-size:15px; color:var(--ink); font-weight:600;}
+label.field input:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.btn{appearance:none; border-radius:8px; padding:13px 20px; font-size:15px; font-weight:700; cursor:pointer; border:2px solid var(--ink); transition:filter .12s;}
+.btn.primary{background:var(--accent); color:var(--ink); border-color:var(--accent);}
+.btn.primary:hover{filter:brightness(1.05);}
+.btn.ghost{background:var(--surface); color:var(--ink);}
+.btn.ghost:hover{background:var(--accent-soft);}
+.btn.danger{background:var(--surface); color:var(--danger); border-color:var(--danger); padding:8px 14px; font-size:13px;}
+.btn.danger:hover{background:var(--danger); color:#fff;}
+.btn.small{padding:8px 14px; font-size:13px;}
+.msg{border-radius:10px; padding:10px 12px; font-size:13.5px; font-weight:600; margin-top:12px;}
+.msg.err{background:#FBE3E0; border:2px solid var(--danger); color:var(--danger);}
+.msg.info{background:var(--surface-2); border:1px solid var(--line); color:var(--ink-dim);}
+.topbar{display:flex; align-items:center; gap:12px; margin-bottom:18px;}
+.topbar .who{font-size:13px; color:var(--ink-dim); font-weight:600;}
+.topbar .spacer{flex:1;}
+.tlist{display:flex; flex-direction:column; gap:12px;}
+.titem{background:var(--surface); border:2px solid var(--ink); border-radius:12px; padding:14px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.titem .tmain{flex:1; min-width:0;}
+.titem .tname{font-size:16px; font-weight:800; letter-spacing:-0.01em;}
+.titem .tname.unnamed{color:var(--ink-dim); font-style:italic; font-weight:600;}
+.titem .tmeta{font-size:12.5px; color:var(--ink-dim); font-weight:600; margin-top:3px; display:flex; gap:6px 14px; flex-wrap:wrap;}
+.titem .tactions{display:flex; gap:8px; flex-wrap:wrap;}
+.count{font-size:13px; color:var(--ink-dim); font-weight:700; margin-bottom:12px;}
+.footer{text-align:center; font-size:12px; color:var(--ink-dim); border-top:1px solid var(--line); margin-top:28px; padding-top:16px;}
+a.link{color:var(--accent-ink); font-weight:700; text-decoration:none;}
+a.link:hover{text-decoration:underline;}
+@media (max-width:560px){ .titem{align-items:flex-start;} .titem .tactions{width:100%;} }
+</style>
+
+<div class="wrap">
+  <div class="header-row">
+    <img class="site-logo" src="Grizzlys_512x512.png" alt="Grizzlys Logo" onerror="this.style.display='none'">
+    <div class="head-text">
+      <p class="eyebrow">Turniergenerator</p>
+      <h1>Übersicht</h1>
+      <p class="sub">Alle erstellten Turniere &mdash; nur mit Admin-Login sichtbar.</p>
+    </div>
+  </div>
+
+  <div id="loginView" class="card" style="display:none;">
+    <label class="field">E-Mail<input type="email" id="email" autocomplete="username" placeholder="admin@..."></label>
+    <label class="field">Passwort<input type="password" id="password" autocomplete="current-password"></label>
+    <button class="btn primary" id="loginBtn">Anmelden</button>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div id="listView" style="display:none;">
+    <div class="topbar">
+      <span class="who" id="whoami"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" id="reloadBtn">Aktualisieren</button>
+      <button class="btn ghost small" id="logoutBtn">Abmelden</button>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="tlist" id="tlist"></div>
+    <div id="listMsg"></div>
+  </div>
+
+  <div class="footer">&copy; <span id="year"></span> Unihockey am Greifensee</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script>
+(function(){
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyC3NNfNf9uCgDN3TL8nSmNslWoV4qHi5Bk",
+    authDomain: "turniergenerator-87b1f.firebaseapp.com",
+    databaseURL: "https://turniergenerator-87b1f-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "turniergenerator-87b1f"
+  };
+  firebase.initializeApp(FIREBASE_CONFIG);
+  var db = firebase.database(), auth = firebase.auth();
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return (s+'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // decode the creation time embedded in the tournament id (Date.now().toString(36) + 6 random chars)
+  function dateFromId(id){
+    try{
+      var ms = parseInt(id.slice(0, -6), 36);
+      if(!ms || ms < 1000000000000 || ms > 4000000000000) return null;
+      var d = new Date(ms);
+      var pad = function(n){ return (n<10?'0':'')+n; };
+      return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    }catch(e){ return null; }
+  }
+
+  function show(view){
+    $('loginView').style.display = view==='login' ? '' : 'none';
+    $('listView').style.display  = view==='list'  ? '' : 'none';
+  }
+
+  auth.onAuthStateChanged(function(user){
+    if(user && !user.isAnonymous){
+      $('whoami').textContent = 'Angemeldet als ' + (user.email||'Admin');
+      show('list');
+      loadList();
+    } else {
+      show('login');
+    }
+  });
+
+  $('loginBtn').onclick = function(){
+    var btn = this; btn.disabled = true;
+    $('loginMsg').innerHTML = '';
+    auth.signInWithEmailAndPassword($('email').value.trim(), $('password').value)
+      .catch(function(e){
+        $('loginMsg').innerHTML = '<div class="msg err">Anmeldung fehlgeschlagen: '+esc(e.message)+'</div>';
+      })
+      .finally(function(){ btn.disabled = false; });
+  };
+  $('password').addEventListener('keydown', function(e){ if(e.key==='Enter') $('loginBtn').click(); });
+
+  $('logoutBtn').onclick = function(){ auth.signOut(); };
+  $('reloadBtn').onclick = function(){ loadList(); };
+
+  function loadList(){
+    $('listMsg').innerHTML = '';
+    $('tlist').innerHTML = '';
+    $('count').textContent = 'Lade…';
+    db.ref('tournaments').once('value').then(function(snap){
+      var data = snap.val() || {};
+      var items = Object.keys(data).map(function(id){
+        var cfg = (data[id] && data[id].config) || {};
+        return {
+          id: id,
+          name: cfg.name || '',
+          numTeams: cfg.numTeams || 0,
+          numGroups: cfg.numGroups || 1,
+          date: dateFromId(id),
+          sortKey: (function(){ var ms = parseInt(id.slice(0,-6),36); return isNaN(ms)?0:ms; })()
+        };
+      });
+      items.sort(function(a,b){ return b.sortKey - a.sortKey; });
+      render(items);
+    }).catch(function(e){
+      $('count').textContent = '';
+      $('listMsg').innerHTML = '<div class="msg err">Kein Zugriff auf die Turnierliste. Dieses Konto ist nicht als Admin freigeschaltet.<br><small>'+esc(e.message)+'</small></div>';
+    });
+  }
+
+  function render(items){
+    $('count').textContent = items.length===0 ? 'Noch keine Turniere.' : (items.length+' Turnier'+(items.length===1?'':'e'));
+    var html = '';
+    items.forEach(function(t){
+      html += '<div class="titem" data-id="'+esc(t.id)+'">' +
+        '<div class="tmain">' +
+          '<div class="tname'+(t.name?'':' unnamed')+'">'+(t.name?esc(t.name):'Ohne Namen')+'</div>' +
+          '<div class="tmeta">' +
+            (t.date? '<span>'+esc(t.date)+'</span>' : '') +
+            '<span>'+t.numTeams+' Teams'+(t.numGroups===2?', 2 Gruppen':'')+'</span>' +
+            '<span>ID: '+esc(t.id)+'</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tactions">' +
+          '<a class="btn ghost small" href="./?t='+encodeURIComponent(t.id)+'" target="_blank" rel="noopener">Öffnen</a>' +
+          '<button class="btn danger" data-del="'+esc(t.id)+'">Löschen</button>' +
+        '</div>' +
+      '</div>';
+    });
+    $('tlist').innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-del]'), function(btn){
+      btn.onclick = function(){
+        var id = this.getAttribute('data-del');
+        var row = document.querySelector('.titem[data-id="'+id+'"]');
+        var label = row ? (row.querySelector('.tname').textContent) : id;
+        if(!confirm('Turnier "'+label+'" wirklich unwiderruflich löschen?')) return;
+        this.disabled = true; this.textContent = 'Lösche…';
+        db.ref('tournaments/'+id).remove().then(function(){
+          if(row) row.parentNode.removeChild(row);
+        }).catch(function(e){
+          alert('Löschen fehlgeschlagen: '+e.message);
+          btn.disabled = false; btn.textContent = 'Löschen';
+        });
+      };
+    });
+  }
+})();
+</script>
